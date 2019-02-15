@@ -12,22 +12,26 @@ import torchvision.transforms
 
 class Classifier(nn.Module):
     """Convnet Classifier"""
-    def layer(self, i, o):
-        return [nn.Conv2d(in_channels=i, out_channels=o, kernel_size=(3, 3), padding=1),
-                nn.Dropout(p=0.3),
+    def layer(self, i, o, dropout=0.1):
+        return [nn.Conv2d(in_channels=i, out_channels=o, kernel_size=(4, 4), padding=2),
+                nn.Dropout(p=dropout),
                 nn.ReLU(),
                 nn.MaxPool2d(kernel_size=(2, 2), stride=2)]
 
     def __init__(self):
         super(Classifier, self).__init__()
-        layers = self.layer(1,16)+self.layer(16,32)+self.layer(32,64)+self.layer(64,128)
+        layers = self.layer(1,20,dropout=0)+self.layer(20,40)+self.layer(40,60)+self.layer(60,80)+self.layer(80,128)
         self.conv = nn.Sequential(*layers)
         self.clf = nn.Linear(128, 10)
+        self.drop = nn.Dropout(p=0.4)
 
     def forward(self, x):
-        return self.clf(self.conv(x).squeeze())
+        x = self.conv(x)
+        y = x.squeeze()
+        return self.clf(self.drop(y))
 
 def main():
+    torch.manual_seed(0)
     mnist_transforms = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
     mnist_train = torchvision.datasets.MNIST(root='./data', train=True, transform=mnist_transforms, download=True)
     mnist_test = torchvision.datasets.MNIST(root='./data', train=False, transform=mnist_transforms, download=True)
@@ -52,14 +56,13 @@ def main():
                 inputs, targets = inputs.cuda(), targets.cuda()
 
             optimizer.zero_grad()
-            outputs = clf(inputs)
-            loss = criterion(outputs, targets)
+            loss = criterion(clf(inputs), targets)
             loss.backward()
             optimizer.step()
             losses.append(loss.data.item())
             
             if batch_idx%50==0:
-                print('Epoch : %d Loss : %.3f ' % (epoch, np.mean(losses)))
+                print('Epoch : %d, Loss : %.3f ' % (epoch, np.mean(losses)))
         
         # Evaluate
         clf.eval()
@@ -73,7 +76,7 @@ def main():
             total += targets.size(0)
             correct += predicted.eq(targets.data).cpu().sum()
 
-        print('Epoch : %d Test Acc : %.2f, number of tests : %d' % (epoch, 100*float(correct)/total, total))
+        print('Epoch : %d, Test Accuracy : %.2f%%, number of tests : %d' % (epoch, 100*float(correct)/total, total))
         print('--------------------------------------------------------------')
         clf.train()
 
